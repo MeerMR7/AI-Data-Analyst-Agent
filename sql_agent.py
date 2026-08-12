@@ -3,7 +3,7 @@ import json
 import sqlite3
 import asyncio
 from typing import List, Dict, Any
-from dotenv import load_dotenv  # 👈 Added load_dotenv import
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -13,7 +13,7 @@ matplotlib.use("Agg")  # Non-interactive backend for server environments
 import matplotlib.pyplot as plt
 from openai import AsyncOpenAI
 
-# 👈 Force load environment variables from local .env file
+# Force load environment variables from local .env file
 load_dotenv(override=True)
 
 app = FastAPI(title="AI Data Analyst Agent (Powered by Groq)")
@@ -22,6 +22,9 @@ app = FastAPI(title="AI Data Analyst Agent (Powered by Groq)")
 # 1. GROQ CLIENT CONFIGURATION
 # =====================================================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY is not set in environment or .env file!")
 
 client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1",
