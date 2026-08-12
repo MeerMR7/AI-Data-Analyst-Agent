@@ -1,9 +1,17 @@
+# Byte-compiled / Python cache
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables (Prevents API key leaks)
+.env
+.env.*
+!.env.example
+
+# Local Databases & Output Files
 *.db
+*.sqlite3
 sales_chart.png
-.env
+
+# DeepEval / Test cache
 .deepeval/
-streamlit_app.py/.env
-.env
-.env
-.env
