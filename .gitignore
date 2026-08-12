@@ -4,3 +4,4 @@ sales_chart.png
 .env
 .deepeval/
 streamlit_app.py/.env
+.env
