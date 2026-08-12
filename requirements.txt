@@ -1,6 +1,8 @@
 streamlit
+fastapi
+uvicorn
 openai
-matplotlib
 pandas
+matplotlib
 python-dotenv
 pydantic
