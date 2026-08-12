@@ -3,4 +3,4 @@ __pycache__/
 sales_chart.png
 .env
 .deepeval/
-streamlit_app.py/
+streamlit_app.py/.env
