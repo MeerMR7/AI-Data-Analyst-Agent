@@ -2,141 +2,77 @@ import os
 import json
 import sqlite3
 import asyncio
-from typing import List, Dict, Any
+import matplotlib.pyplot as plt
+from fastapi import FastAPI, HTTPException
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-import pandas as pd
-import matplotlib
-matplotlib.use("Agg")  # Non-interactive backend for server environments
-import matplotlib.pyplot as plt
-from openai import AsyncOpenAI
+load_dotenv()
 
-# Force load environment variables from local .env file
-load_dotenv(override=True)
+app = FastAPI(title="SQL Agent API")
 
-app = FastAPI(title="AI Data Analyst Agent (Powered by Groq)")
-
-# =====================================================================
-# 1. GROQ CLIENT CONFIGURATION
-# =====================================================================
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY is not set in environment or .env file!")
-
+# Initialize Async Client for Groq API
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
 client = AsyncOpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=GROQ_API_KEY
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1"
 )
 
-# =====================================================================
-# 2. DATABASE SETUP
-# =====================================================================
-DB_PATH = "company_data.db"
+DB_PATH = "company.db"
 
-def init_mock_database():
-    """Populates local SQLite database with sample company sales data."""
+
+def execute_sql_query(sql_query: str):
+    """Executes a SQL query against the SQLite database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sales (
-            id INTEGER PRIMARY KEY,
-            region TEXT,
-            category TEXT,
-            amount REAL,
-            date TEXT
-        )
-    """)
-    cursor.execute("SELECT COUNT(*) FROM sales")
-    if cursor.fetchone()[0] == 0:
-        sample_data = [
-            ("North", "Electronics", 1200.50, "2026-01-15"),
-            ("North", "Furniture", 450.00, "2026-01-18"),
-            ("South", "Electronics", 2300.00, "2026-02-01"),
-            ("South", "Furniture", 890.20, "2026-02-10"),
-            ("East", "Electronics", 3100.00, "2026-02-14"),
-            ("East", "Furniture", 150.00, "2026-02-20"),
-            ("West", "Electronics", 950.00, "2026-03-01"),
-            ("West", "Furniture", 1100.00, "2026-03-05"),
-        ]
-        cursor.executemany("INSERT INTO sales (region, category, amount, date) VALUES (?, ?, ?, ?)", sample_data)
-        conn.commit()
-    conn.close()
-
-init_mock_database()
-
-# =====================================================================
-# 3. AGENT TOOLS
-# =====================================================================
-
-async def get_db_schema() -> str:
-    """Returns the SQL schema definition for all tables in the database."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
-    schemas = [row[0] for row in cursor.fetchall() if row[0]]
-    conn.close()
-    return "\n".join(schemas)
-
-async def execute_sql_query(sql_query: str) -> str:
-    """Executes SQLite query and returns results as JSON string or error text."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query(sql_query, conn)
-        conn.close()
-        if df.empty:
-            return "Query executed successfully, but returned 0 rows."
-        return df.to_json(orient="records")
-    except Exception as e:
-        return f"SQL Execution Error: {str(e)}"
-
-async def generate_chart(data_json: Any, x_col: str, y_col: str, chart_title: str) -> str:
-    """Generates a bar chart and saves it locally."""
-    try:
-        if isinstance(data_json, str):
-            df = pd.read_json(data_json)
+        cursor.execute(sql_query)
+        if sql_query.strip().upper().startswith("SELECT"):
+            columns = [description[0] for description in cursor.description]
+            rows = cursor.fetchall()
+            result = [dict(zip(columns, row)) for row in rows]
         else:
-            df = pd.DataFrame(data_json)
-            
-        plt.figure(figsize=(8, 4))
-        plt.bar(df[x_col].astype(str), df[y_col], color="#2563eb")
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
-        plt.title(chart_title)
-        plt.tight_layout()
-        
-        file_path = "sales_chart.png"
-        plt.savefig(file_path)
-        plt.close()
-        return f"Chart successfully saved to {file_path}"
+            conn.commit()
+            result = {"status": "success", "rows_affected": cursor.rowcount}
+        conn.close()
+        return result
     except Exception as e:
-        return f"Chart Generation Error: {str(e)}"
+        conn.close()
+        return {"error": str(e)}
 
-TOOL_MAPPING = {
-    "get_db_schema": get_db_schema,
-    "execute_sql_query": execute_sql_query,
-    "generate_chart": generate_chart,
-}
+
+def generate_chart(categories: list, values: list, chart_title: str, x_label: str, y_label: str):
+    """Generates and saves a bar chart image to sales_chart.png."""
+    try:
+        plt.figure(figsize=(10, 6))
+        plt.bar(categories, values, color="skyblue")
+        plt.title(chart_title)
+        plt.xlabel(x_label)
+        plt.ylabel(y_label)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        chart_path = "sales_chart.png"
+        plt.savefig(chart_path)
+        plt.close()
+        return {"status": "chart generated", "file_path": chart_path}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "get_db_schema",
-            "description": "Fetches database schemas.",
-            "parameters": {"type": "object", "properties": {}, "required": []}
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "execute_sql_query",
-            "description": "Executes a SQL query against SQLite database.",
+            "description": "Execute a SQL query against the SQLite database. Available table: sales (id, region, category, amount, date).",
             "parameters": {
                 "type": "object",
-                "properties": {"sql_query": {"type": "string"}},
+                "properties": {
+                    "sql_query": {
+                        "type": "string",
+                        "description": "Valid SQLite query statement."
+                    }
+                },
                 "required": ["sql_query"]
             }
         }
@@ -145,112 +81,94 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "generate_chart",
-            "description": "Generates a bar chart from a list of data record objects.",
+            "description": "Generate a bar chart visualization and save it as sales_chart.png.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "data_json": {
+                    "categories": {
                         "type": "array",
-                        "items": {"type": "object"},
-                        "description": "List of record dictionaries returned by SQL query."
+                        "items": {"type": "string"},
+                        "description": "Labels for the X axis"
                     },
-                    "x_col": {"type": "string", "description": "Column name for X-axis."},
-                    "y_col": {"type": "string", "description": "Column name for Y-axis."},
-                    "chart_title": {"type": "string", "description": "Title of the chart."}
+                    "values": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Numeric values for the Y axis"
+                    },
+                    "chart_title": {"type": "string"},
+                    "x_label": {"type": "string"},
+                    "y_label": {"type": "string"}
                 },
-                "required": ["data_json", "x_col", "y_col", "chart_title"]
+                "required": ["categories", "values", "chart_title", "x_label", "y_label"]
             }
         }
     }
 ]
 
-# =====================================================================
-# 4. REACT AGENT EXECUTION LOOP
-# =====================================================================
-async def run_sql_agent(user_prompt: str) -> Dict[str, Any]:
+
+async def run_sql_agent(user_query: str, max_steps: int = 5):
+    """Main agent loop that executes tool calls iteratively."""
+    system_prompt = (
+        "You are an expert AI Data Analyst. Your task is to answer questions about the company database.\n"
+        "The database contains a 'sales' table with columns: id, region, category, amount, date.\n"
+        "1. Always query the database using 'execute_sql_query' to retrieve data.\n"
+        "2. If the user asks for a chart or visualization, call 'generate_chart'.\n"
+        "3. Present a clear analytical summary as your final answer."
+    )
+
     messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert Data Analyst AI Agent.\n"
-                "1. Always inspect DB schema first using `get_db_schema`.\n"
-                "2. Write and execute SQLite queries using `execute_sql_query`.\n"
-                "3. When requested to generate a chart, pass the records returned by `execute_sql_query` directly into `generate_chart`.\n"
-                "4. Return a clean analytical final answer with key business insights."
-            )
-        },
-        {"role": "user", "content": user_prompt}
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_query}
     ]
+
     execution_trace = []
-    
-    for turn in range(6):
+
+    for step in range(max_steps):
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-20b",
             messages=messages,
             tools=AGENT_TOOLS,
             temperature=0.0
         )
-        
-        message = response.choices[0].message
-        
-        if not message.tool_calls:
-            return {"final_answer": message.content, "execution_trace": execution_trace}
-        
-        messages.append(message)
-        
-        for tool_call in message.tool_calls:
-            fn_name = tool_call.function.name
-            raw_args = tool_call.function.arguments
-            
-            # SAFE ARGUMENT PARSING
-            try:
-                if isinstance(raw_args, str) and raw_args.strip():
-                    fn_args = json.loads(raw_args)
-                elif isinstance(raw_args, dict):
-                    fn_args = raw_args
-                else:
-                    fn_args = {}
-            except Exception:
-                cleaned_str = str(raw_args).replace('\\"', '"').replace('\\\\', '\\')
-                fn_args = json.loads(cleaned_str)
 
-            if not isinstance(fn_args, dict):
-                fn_args = {}
+        response_message = response.choices[0].message
+        messages.append(response_message)
 
-            execution_trace.append({"step": turn + 1, "tool": fn_name, "args": fn_args})
-            
-            if fn_name in TOOL_MAPPING:
-                tool_output = await TOOL_MAPPING[fn_name](**fn_args)
+        if not response_message.tool_calls:
+            return {
+                "final_answer": response_message.content,
+                "execution_trace": execution_trace
+            }
+
+        for tool_call in response_message.tool_calls:
+            func_name = tool_call.function.name
+            func_args = json.loads(tool_call.function.arguments)
+
+            execution_trace.append({
+                "tool": func_name,
+                "args": func_args
+            })
+
+            if func_name == "execute_sql_query":
+                tool_result = execute_sql_query(func_args.get("sql_query"))
+            elif func_name == "generate_chart":
+                tool_result = generate_chart(
+                    func_args.get("categories"),
+                    func_args.get("values"),
+                    func_args.get("chart_title"),
+                    func_args.get("x_label"),
+                    func_args.get("y_label")
+                )
             else:
-                tool_output = f"Error: Tool {fn_name} not found."
-            
+                tool_result = {"error": f"Unknown tool {func_name}"}
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "name": fn_name,
-                "content": str(tool_output)
+                "content": json.dumps(tool_result)
             })
 
-    return {"final_answer": "Reached maximum reasoning steps.", "execution_trace": execution_trace}
-
-# =====================================================================
-# 5. FASTAPI ENDPOINT
-# =====================================================================
-
-class QueryRequest(BaseModel):
-    prompt: str = Field(
-        ..., 
-        json_schema_extra={"example": "What are the total sales per region? Plot a chart for it."}
-    )
-
-@app.post("/api/analyze")
-async def analyze_data(request: QueryRequest):
-    try:
-        result = await run_sql_agent(request.prompt)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":	
-    import uvicorn
-    uvicorn.run("sql_agent:app", host="0.0.0.0", port=8000, reload=True)
+    return {
+        "final_answer": "Reached maximum reasoning steps.",
+        "execution_trace": execution_trace
+    }
