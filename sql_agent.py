@@ -125,7 +125,7 @@ async def run_sql_agent(user_query: str, max_steps: int = 5):
 
     for step in range(max_steps):
         response = await client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             tools=AGENT_TOOLS,
             temperature=0.0
