@@ -21,6 +21,38 @@ client = AsyncOpenAI(
 DB_PATH = "company.db"
 
 
+def init_db():
+    """Creates the sales table and populates sample data if it doesn't exist."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            region TEXT,
+            category TEXT,
+            amount REAL,
+            date TEXT
+        )
+    ''')
+    cursor.execute("SELECT COUNT(*) FROM sales")
+    if cursor.fetchone()[0] == 0:
+        sample_data = [
+            ("North", "Electronics", 1200.50, "2026-01-15"),
+            ("South", "Furniture", 850.00, "2026-01-16"),
+            ("East", "Electronics", 2300.00, "2026-01-18"),
+            ("West", "Clothing", 450.25, "2026-01-20"),
+            ("North", "Furniture", 1100.00, "2026-02-01"),
+            ("South", "Electronics", 3100.00, "2026-02-05")
+        ]
+        cursor.executemany("INSERT INTO sales (region, category, amount, date) VALUES (?, ?, ?, ?)", sample_data)
+        conn.commit()
+    conn.close()
+
+
+# Run initialization on boot
+init_db()
+
+
 def execute_sql_query(sql_query: str):
     """Executes a SQL query against the SQLite database."""
     conn = sqlite3.connect(DB_PATH)
