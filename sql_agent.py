@@ -184,12 +184,12 @@ async def run_sql_agent(user_prompt: str) -> Dict[str, Any]:
     execution_trace = []
     
     for turn in range(6):
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=messages,
-            tools=AGENT_TOOLS,
-            temperature=0.0
-        )
+response = await client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=messages,
+    tools=AGENT_TOOLS,
+    temperature=0.0
+)
         
         message = response.choices[0].message
         
