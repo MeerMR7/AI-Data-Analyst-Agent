@@ -37,7 +37,6 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
         
-        # Display stored SQL code if present
         if "sql_queries" in message:
             for sql in message["sql_queries"]:
                 st.code(sql, language="sql")
@@ -49,15 +48,12 @@ for message in st.session_state.messages:
 user_input = st.chat_input("Type your data query here...")
 
 if user_input:
-    # Append & display user message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.write(user_input)
 
-    # Process Assistant Response
     with st.chat_message("assistant"):
         with st.spinner("Analyzing data and generating SQL queries..."):
-            # Clean up old chart before executing
             chart_path = "sales_chart.png"
             if os.path.exists(chart_path):
                 try:
@@ -66,12 +62,10 @@ if user_input:
                     pass
 
             try:
-                # Execute agent logic
                 result = asyncio.run(run_sql_agent(user_input))
                 final_answer = result.get("final_answer", "No analysis returned.")
                 trace = result.get("execution_trace", [])
                 
-                # Extract executed SQL queries from trace
                 extracted_sql = []
                 for step in trace:
                     if step.get("tool") == "execute_sql_query":
@@ -79,23 +73,19 @@ if user_input:
                         if query:
                             extracted_sql.append(query)
 
-                # 1. Show Generated SQL Queries
                 if extracted_sql:
                     st.subheader("🔍 Generated SQL Query")
                     for sql in extracted_sql:
                         st.code(sql, language="sql")
 
-                # 2. Show Final Analytical Answer
                 st.subheader("💡 Business Insight")
                 st.write(final_answer)
 
-                # 3. Render Chart if Generated
                 has_chart = os.path.exists(chart_path)
                 if has_chart:
                     st.subheader("📈 Visualization")
                     st.image(chart_path, use_container_width=True)
 
-                # Save assistant response details to chat history
                 msg_data = {"role": "assistant", "content": final_answer}
                 if extracted_sql:
                     msg_data["sql_queries"] = extracted_sql
