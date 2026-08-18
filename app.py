@@ -5,7 +5,7 @@ from sql_agent import run_sql_agent
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="AI Data Analyst Dashboard",
+    page_title="AI Data Analyst",
     page_icon="📊",
     layout="wide"
 )
@@ -25,7 +25,7 @@ st.sidebar.markdown(
 )
 
 # 3. Main Dashboard Header
-st.title("📊 AI Data Analyst Dashboard")
+st.title("📊 AI Data Analyst")
 st.write("Ask natural language questions about your company database in real-time.")
 
 # 4. Initialize Session State for Chat History
